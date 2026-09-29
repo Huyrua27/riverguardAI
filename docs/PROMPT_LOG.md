@@ -5,7 +5,7 @@
 
 | Ngày | Công cụ AI | Mục đích | Đầu ra | Nhóm chỉnh sửa? |
 |------|-----------|----------|--------|-----------------|
-| 2026-09-14 | (ví dụ) trợ lý lập trình | Sinh scaffold repo ban đầu | Cấu trúc thư mục, module stubs | Có — nhóm rà soát & hoàn thiện logic |
+| 2026-09-14 | Claude Code | Sinh scaffold repo ban đầu | Cấu trúc thư mục, module stubs | Có — nhóm rà soát & hoàn thiện logic |
 |  |  |  |  |  |
 
 ## Nguyên tắc kê khai
