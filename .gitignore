@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Data & models (tracked via DVC / release assets, not git)
+data/raw/*
+data/processed/*
+data/external/*
+!data/**/.gitkeep
+models/*
+!models/.gitkeep
+!models/README.md
+# Weights auto-downloaded by Ultralytics / CLIP (hundreds of MB)
+weights/
+*.pt
+*.onnx
+*.engine
+outputs/*
+!outputs/.gitkeep
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Env / secrets
+.env
+*.key
+
+# Office lock files, competition form template (BTC's own file)
+~$*
+docs/AI2026_*
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
