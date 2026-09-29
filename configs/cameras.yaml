@@ -1,0 +1,60 @@
+# Danh mục camera cho Decision Dashboard.
+#
+# - id:       tên thư mục kết quả trong outputs/video/<id>/ (bỏ trống source nếu chưa có luồng)
+# - type:     fixed (camera cố định) | drone
+# - status:   để trống → tự suy ra (online nếu có dữ liệu, offline nếu không);
+#             hoặc ghi rõ: online | offline | patrolling | maintenance
+# - lat/lon:  toạ độ đặt camera trên bản đồ GIS.
+#             ⚠ HIỆN LÀ VỊ TRÍ MINH HOẠ (placeholder_location: true) — thay bằng toạ độ thật.
+# - heading_deg: hướng camera nhìn (0 = Bắc, 90 = Đông). Để null → hướng dòng chảy
+#             hiển thị theo khung hình thay vì hướng địa lý.
+cameras:
+  - id: input1
+    name: Cầu A
+    type: fixed
+    lat: 10.7938
+    lon: 106.6795
+    heading_deg: null
+    placeholder_location: true
+
+  - id: input2
+    name: Cầu B
+    type: fixed
+    lat: 10.7902
+    lon: 106.6882
+    heading_deg: null
+    placeholder_location: true
+
+  - id: input3
+    name: Kênh C
+    type: fixed
+    lat: 10.7871
+    lon: 106.6960
+    heading_deg: null
+    placeholder_location: true
+
+  - id: input4
+    name: Kênh D
+    type: fixed
+    lat: 10.7846
+    lon: 106.7031
+    heading_deg: null
+    placeholder_location: true
+
+  - id: input5
+    name: Cống E
+    type: fixed
+    lat: 10.7962
+    lon: 106.6712
+    heading_deg: null
+    placeholder_location: true
+
+  # Nguồn đã khai báo nhưng chưa có luồng video → hiển thị OFFLINE.
+  - id: drone01
+    name: Drone 01
+    type: drone
+    status: offline
+    lat: 10.7890
+    lon: 106.6920
+    heading_deg: null
+    placeholder_location: true

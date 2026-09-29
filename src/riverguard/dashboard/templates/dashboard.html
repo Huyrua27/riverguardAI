@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RiverGuard AI — Trung tâm điều hành</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{
+  --bg:#060c17; --bg2:#0a1322; --panel:#0c1729; --panel2:#0f1d33; --line:#18294a; --line2:#223a63;
+  --ink:#e5eefb; --muted:#8095b8; --dim:#51668a;
+  --cyan:#22d3ee; --teal:#2dd4bf; --green:#22c55e; --amber:#f59e0b; --yellow:#eab308; --red:#ef4444;
+  --perc:#22c55e; --reas:#f59e0b; --deci:#ef4444;
+  --c-plastic:#22d3ee; --c-foam:#e2e8f0; --c-organic:#4ade80; --c-other:#a78bfa;
+  --radius:12px;
+  --mono:ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:13px/1.45 system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+  background:radial-gradient(1200px 600px at 60% -10%,#0f2342 0,transparent 60%),var(--bg);min-height:100vh}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+
+/* ---------- header ---------- */
+.top{display:flex;align-items:center;gap:18px;padding:10px 18px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#0b1830,#08111f);position:sticky;top:0;z-index:50}
+.brand{display:flex;align-items:center;gap:10px}
+.brand b{display:block;letter-spacing:.14em;font-size:15px}
+.brand small{color:var(--muted);font-size:11.5px}
+.modes{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px;margin-left:12px}
+.modes button{background:none;border:0;padding:6px 14px;border-radius:7px;color:var(--muted);cursor:pointer;font-weight:600}
+.modes button.on{background:var(--panel2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line2)}
+.sys{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:12px;color:var(--muted)}
+.sys .online{display:flex;align-items:center;gap:7px;color:var(--green);font-weight:700;letter-spacing:.08em}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.7);animation:ping 1.8s infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(34,197,94,.6)}70%{box-shadow:0 0 0 8px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+.clock{font:600 15px var(--mono);color:var(--ink)}
+
+/* ---------- decision chain ---------- */
+.chain{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 18px;border-bottom:1px solid var(--line);
+  background:var(--bg2);font-size:11.5px;color:var(--muted)}
+.chain .st{padding:3px 9px;border-radius:999px;border:1px solid var(--line2);white-space:nowrap}
+.chain .st.p{color:var(--perc);border-color:rgba(34,197,94,.35)}
+.chain .st.r{color:var(--reas);border-color:rgba(245,158,11,.35)}
+.chain .st.d{color:var(--deci);border-color:rgba(239,68,68,.4)}
+.chain .ar{color:var(--dim)}
+.chain .lg{margin-left:auto;display:flex;gap:12px}
+.chain .lg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+/* ---------- layout ---------- */
+.ops{display:grid;gap:12px;padding:12px 18px 18px;max-width:1720px;margin:0 auto;
+  grid-template-columns:230px minmax(0,1fr) 350px;
+  grid-template-areas:"cams live side" "map map queue" "stats stats stats"}
+.cams{grid-area:cams}.live{grid-area:live}.side{grid-area:side}.map{grid-area:map}.queue{grid-area:queue}
+.stats{grid-area:stats;display:grid;gap:12px;grid-template-columns:2fr 1.1fr 1fr 1fr}
+@media (max-width:1280px){
+  .ops{grid-template-columns:minmax(0,1fr) 330px;grid-template-areas:"cams cams" "live side" "map queue" "stats stats"}
+  .cams .list{flex-direction:row;overflow-x:auto}
+  .cams .cam{min-width:190px}
+  .stats{grid-template-columns:1fr 1fr}
+}
+@media (max-width:860px){
+  .ops{grid-template-columns:minmax(0,1fr);grid-template-areas:"cams" "live" "side" "map" "queue" "stats"}
+  .stats{grid-template-columns:1fr}
+  .chain .lg{display:none}
+  .sys .lbl{display:none}
+}
+
+.panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:var(--radius);
+  display:flex;flex-direction:column;min-width:0;position:relative}
+.ph{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.ph h2{margin:0;font-size:11.5px;letter-spacing:.12em;font-weight:700;color:#c9d6ec;text-transform:uppercase}
+.ph .sub{color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .sp{margin-left:auto}
+.layer{font-size:9.5px;font-weight:800;letter-spacing:.1em;padding:2px 7px;border-radius:4px;white-space:nowrap}
+.layer.p{color:var(--perc);background:rgba(34,197,94,.1)}
+.layer.r{color:var(--reas);background:rgba(245,158,11,.1)}
+.layer.d{color:var(--deci);background:rgba(239,68,68,.12)}
+.pb{padding:12px;flex:1;min-height:0}
+.muted{color:var(--muted)} .dim{color:var(--dim)}
+.tg{display:flex;gap:4px;flex-wrap:wrap}
+.tg button{background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:11px;
+  color:var(--muted);cursor:pointer}
+.tg button.on{color:var(--cyan);border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.08)}
+.tg button:focus-visible,.cam:focus-visible,.modes button:focus-visible,tr[tabindex]:focus-visible,.btn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.btn{background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.4);color:var(--cyan);border-radius:8px;
+  padding:6px 12px;cursor:pointer;font-weight:600;font-size:12px}
+.btn:hover{background:rgba(34,211,238,.18)}
+
+/* ---------- camera list ---------- */
+.cams .list{display:flex;flex-direction:column;gap:6px;padding:8px}
+.cam{display:flex;gap:9px;align-items:center;padding:9px;border-radius:10px;border:1px solid transparent;
+  background:var(--bg2);cursor:pointer;text-align:left;width:100%}
+.cam:hover{border-color:var(--line2)}
+.cam.sel{border-color:rgba(34,211,238,.55);background:rgba(34,211,238,.07)}
+.cam[aria-disabled="true"]{opacity:.55;cursor:not-allowed}
+.cam .sd{width:9px;height:9px;border-radius:50%;flex:none}
+.cam .sd.online{background:var(--green);box-shadow:0 0 8px var(--green)}
+.cam .sd.patrolling{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.cam .sd.offline{background:#475569}
+.cam .sd.maintenance{background:var(--amber)}
+.cam .nm{font-weight:600;font-size:13px}
+.cam .st{font-size:10.5px;letter-spacing:.06em;color:var(--muted)}
+.cam .rk{margin-left:auto;text-align:right;font-size:11px}
+.cam .rk b{display:block;font-size:13px}
+
+/* ---------- live ---------- */
+.stage{position:relative;background:#02060d;border-radius:9px;overflow:hidden;height:390px}
+.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.stage video{object-fit:contain}
+.stage .badge{position:absolute;top:10px;left:10px;display:flex;gap:6px;align-items:center;font:700 10.5px var(--mono);
+  letter-spacing:.08em;background:rgba(2,6,13,.7);padding:4px 8px;border-radius:6px;border:1px solid var(--line)}
+.stage .badge .rec{width:7px;height:7px;border-radius:50%;background:var(--red);animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+.stage .cnt{position:absolute;top:10px;right:10px;font:600 11px var(--mono);background:rgba(2,6,13,.7);
+  padding:4px 8px;border-radius:6px;border:1px solid var(--line)}
+.stage .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;padding:20px}
+.stage .playbtn{position:absolute;inset:0;margin:auto;width:68px;height:68px;border-radius:50%;cursor:pointer;
+  background:rgba(34,211,238,.16);border:2px solid var(--cyan);color:var(--cyan);font-size:26px;backdrop-filter:blur(2px)}
+.stage .playbtn:hover{background:rgba(34,211,238,.28)}
+.livefoot{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.livefoot b{color:var(--ink)}
+
+/* ---------- side: overview + alert ---------- */
+.side{display:flex;flex-direction:column;gap:12px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.tile b{display:block;font-size:22px;line-height:1.15}
+.tile span{font-size:10.5px;color:var(--muted);letter-spacing:.04em}
+.net{margin-top:8px;font-size:11.5px;color:var(--muted)}
+.alert{flex:1;overflow:hidden}
+.alert.HIGH{border-color:rgba(239,68,68,.6);box-shadow:0 0 0 1px rgba(239,68,68,.25),0 0 28px rgba(239,68,68,.18)}
+.alert.MEDIUM{border-color:rgba(245,158,11,.55);box-shadow:0 0 22px rgba(245,158,11,.12)}
+.al-head{display:flex;align-items:center;gap:8px;font:800 12px var(--mono);letter-spacing:.12em}
+.alert.HIGH .al-head{color:var(--red)} .alert.MEDIUM .al-head{color:var(--amber)} .alert.LOW .al-head{color:var(--yellow)}
+.al-head .pulse{width:10px;height:10px;border-radius:50%;background:currentColor;animation:blink 1s infinite}
+.al-zone{font-size:24px;font-weight:800;letter-spacing:.04em;margin-top:6px}
+.al-zone small{font-size:12px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:6px}
+.al-big{display:flex;align-items:baseline;gap:10px;margin-top:2px}
+.al-big b{font-size:44px;line-height:1;font-weight:800}
+.alert.HIGH .al-big b{color:var(--red)} .alert.MEDIUM .al-big b{color:var(--amber)} .alert.LOW .al-big b{color:var(--yellow)}
+.al-meta{margin-top:6px;display:grid;gap:3px;font-size:12px}
+.pr{display:inline-block;font:800 10.5px var(--mono);letter-spacing:.08em;padding:2px 8px;border-radius:5px}
+.pr.HIGH{background:var(--red);color:#fff}.pr.MEDIUM{background:var(--amber);color:#1a1204}
+.pr.LOW{background:var(--yellow);color:#1a1604}.pr.NONE{background:#334155;color:#cbd5e1}
+.why{margin-top:10px;border-top:1px dashed var(--line2);padding-top:8px}
+.why h4{margin:0 0 6px;font-size:10.5px;letter-spacing:.14em;color:var(--muted)}
+.why .row{display:grid;grid-template-columns:18px 1fr auto;gap:6px;align-items:center;padding:3px 0;font-size:12px}
+.why .row .ic{color:var(--muted);text-align:center}
+.why .row b{font-variant-numeric:tabular-nums}
+.foot-note{font-size:10.5px;color:var(--dim);margin-top:8px}
+.other-hot{margin-top:8px;font-size:11.5px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);
+  padding:6px 8px;border-radius:8px;cursor:pointer}
+
+/* ---------- risk map ---------- */
+.map .pb{display:flex;flex-direction:column;gap:8px}
+.mapbody{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:10px}
+@media (max-width:860px){.mapbody{grid-template-columns:minmax(0,1fr)}}
+.mapwrap{position:relative;height:470px;border-radius:9px;overflow:hidden;background:#02060d;border:1px solid var(--line)}
+.zlist{display:flex;flex-direction:column;gap:5px;max-height:470px;overflow:auto}
+.zlist h3{margin:0 0 2px;font-size:10.5px;letter-spacing:.12em;color:var(--muted)}
+.zi{display:grid;grid-template-columns:26px 1fr auto;gap:2px 8px;align-items:center;padding:6px 8px;border-radius:8px;
+  background:var(--bg2);border:1px solid var(--line);cursor:pointer;text-align:left;width:100%}
+.zi:hover{border-color:var(--line2)}
+.zi.sel{border-color:rgba(34,211,238,.6);background:rgba(34,211,238,.07)}
+.zi.hot{border-color:rgba(245,158,11,.5)}
+.zi .zn{grid-row:span 2;font:800 16px system-ui;text-align:center}
+.zi .zb{height:5px;border-radius:3px;background:var(--line2);overflow:hidden}
+.zi .zb i{display:block;height:100%}
+.zi .zm{font-size:10.5px;color:var(--muted);grid-column:2/4}
+.mapwrap canvas{position:absolute;inset:0;width:100%;height:100%}
+#gis{position:absolute;inset:0;background:#02060d}
+.mapctl{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px;z-index:5}
+.maplegend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}
+.maplegend .ramp{width:120px;height:8px;border-radius:4px;
+  background:linear-gradient(90deg,rgba(34,211,238,.25),rgba(234,179,8,.8),rgba(245,158,11,.9),rgba(239,68,68,1))}
+.maplegend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.gis-empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);text-align:center;padding:20px}
+.leaflet-container{background:#02060d;font:12px system-ui}
+.osm-dark{filter:invert(1) hue-rotate(185deg) brightness(.82) contrast(.92) saturate(.6)}
+.leaflet-control-layers{background:#0c1729;color:var(--ink);border:1px solid var(--line2)!important}
+.gis-pulse{width:22px;height:22px;border-radius:50%;border:2px solid var(--red);animation:gp 1.4s infinite}
+@keyframes gp{0%{transform:scale(.6);opacity:1}100%{transform:scale(2.2);opacity:0}}
+
+/* ---------- queue ---------- */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+tbody tr[tabindex]{cursor:pointer}
+tbody tr[tabindex]:hover{background:rgba(34,211,238,.05)}
+tr.cur td:first-child{box-shadow:inset 2px 0 0 var(--cyan)}
+tr.selz{background:rgba(34,211,238,.09)}
+.rbar{display:flex;align-items:center;gap:6px}
+.rbar .b{height:6px;border-radius:3px;background:var(--line2);width:54px;overflow:hidden}
+.rbar .b i{display:block;height:100%}
+.qempty{padding:18px;text-align:center;color:var(--muted)}
+
+/* ---------- stats ---------- */
+.chart svg{width:100%;height:170px;display:block}
+.comp .row{display:grid;grid-template-columns:78px 1fr 44px;gap:8px;align-items:center;margin:7px 0;font-size:12px}
+.comp .bar{height:10px;border-radius:5px;background:var(--bg2);overflow:hidden}
+.comp .bar i{display:block;height:100%;border-radius:5px}
+.flowbox{display:flex;gap:12px;align-items:center}
+.flowbox svg{width:112px;height:112px;flex:none}
+.flowbox .fv b{display:block;font-size:22px}
+.kpil{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kpil div{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:8px}
+.kpil b{display:block;font-size:18px}
+.kpil span{font-size:10.5px;color:var(--muted)}
+
+/* ---------- analytics ---------- */
+.ana{padding:12px 18px 18px;max-width:1720px;margin:0 auto;display:grid;gap:12px;
+  grid-template-columns:repeat(2,minmax(0,1fr))}
+.ana .full{grid-column:1/-1}
+@media (max-width:980px){.ana{grid-template-columns:minmax(0,1fr)}}
+.ktiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:760px){.ktiles{grid-template-columns:repeat(2,1fr)}}
+.ktiles .tile b{font-size:26px}
+.scroll{overflow-x:auto}
+.stack{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--bg2);min-width:120px}
+.stack i{display:block;height:100%}
+.hbar{display:grid;grid-template-columns:90px 1fr 50px;gap:8px;align-items:center;margin:7px 0}
+.hbar .b{height:12px;background:var(--bg2);border-radius:4px;overflow:hidden}
+.hbar .b i{display:block;height:100%}
+.exports{display:flex;gap:8px;flex-wrap:wrap}
+footer{padding:10px 18px 22px;color:var(--dim);font-size:11px;max-width:1720px;margin:0 auto}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 2l11 4.5v8.2c0 7-4.6 12.6-11 15.3C9.6 27.3 5 21.7 5 14.7V6.5z" fill="#0e2a44" stroke="#22d3ee" stroke-width="1.5"/>
+      <path d="M9 17c2.3-2 4.7-2 7 0s4.7 2 7 0M9 21.5c2.3-2 4.7-2 7 0s4.7 2 7 0" fill="none" stroke="#2dd4bf" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="16" cy="11" r="2.4" fill="#f59e0b"/>
+    </svg>
+    <div><b>RIVERGUARD AI</b><small>Trung tâm hỗ trợ ra quyết định · giám sát rác trên sông</small></div>
+  </div>
+  <nav class="modes" aria-label="Chế độ">
+    <button data-mode="ops" class="on">Vận hành</button>
+    <button data-mode="ana">Phân tích</button>
+  </nav>
+  <div class="sys">
+    <span class="online"><span class="dot"></span><span>SYSTEM ONLINE</span></span>
+    <span class="lbl num" id="onlineCount"></span>
+    <span class="clock num" id="clock">--:--:--</span>
+  </div>
+</header>
+
+<div class="chain" aria-label="Chuỗi xử lý">
+  <span class="st p">Live Monitoring</span><span class="ar">→</span>
+  <span class="st p">Tracking</span><span class="ar">→</span>
+  <span class="st r">Motion</span><span class="ar">→</span>
+  <span class="st r">Hotspot Prediction</span><span class="ar">→</span>
+  <span class="st d">Risk</span><span class="ar">→</span>
+  <span class="st d">Priority Action</span>
+  <span class="lg"><span><i style="background:var(--perc)"></i>Perception · đang có gì?</span>
+    <span><i style="background:var(--reas)"></i>Reasoning · đi về đâu?</span>
+    <span><i style="background:var(--deci)"></i>Decision · xử lý chỗ nào trước?</span></span>
+</div>
+
+<!-- =================== OPERATIONS =================== -->
+<main class="ops" id="ops">
+  <section class="panel cams" aria-label="Nguồn camera">
+    <div class="ph"><h2>Nguồn camera</h2><span class="sp layer p">PERCEPTION</span></div>
+    <div class="list" id="camList"></div>
+  </section>
+
+  <section class="panel live" aria-label="Camera trực tiếp">
+    <div class="ph"><h2>Live camera</h2><span class="sub" id="liveName"></span>
+      <span class="sp tg" id="liveToggles">
+        <button data-k="box" class="on">Khung</button>
+        <button data-k="label" class="on">Nhãn · ID</button>
+        <button data-k="trail" class="on">Quỹ đạo</button>
+      </span>
+      <span class="layer p">PERCEPTION</span></div>
+    <div class="pb">
+      <div class="stage" id="stage">
+        <video id="video" muted playsinline loop autoplay preload="auto"></video>
+        <canvas id="ov"></canvas>
+        <button class="playbtn" id="playBtn" aria-label="Phát video" hidden>▶</button>
+        <div class="badge"><span class="rec"></span><span id="liveBadge">LIVE · PHÁT LẠI</span></div>
+        <div class="cnt num" id="liveCnt"></div>
+        <div class="empty" id="liveEmpty" hidden></div>
+      </div>
+      <div class="livefoot">
+        <span>⏱ <b class="num" id="liveTime">00:00</b> / <span class="num" id="liveDur">00:00</span></span>
+        <span>Đang theo dõi: <b class="num" id="liveObjs">0</b> vật thể</span>
+        <span id="liveSrc"></span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="panel" aria-label="Tổng quan hệ thống">
+      <div class="ph"><h2>Tổng quan</h2><span class="sub" id="ovCam"></span></div>
+      <div class="pb">
+        <div class="tiles">
+          <div class="tile"><b class="num" id="tObj">0</b><span>Vật thể trên màn hình</span></div>
+          <div class="tile"><b class="num" id="tHot" style="color:var(--red)">0</b><span>Vùng hotspot</span></div>
+          <div class="tile"><b class="num" id="tRisk">0%</b><span>Nguy cơ cao nhất</span></div>
+        </div>
+        <div class="net" id="netLine"></div>
+      </div>
+    </section>
+    <section class="panel alert" id="alert" aria-live="polite">
+      <div class="ph"><h2>Hotspot alert</h2><span class="sp layer d">DECISION</span></div>
+      <div class="pb" id="alertBody"></div>
+    </section>
+  </aside>
+
+  <section class="panel map" aria-label="Bản đồ nguy cơ ô nhiễm">
+    <div class="ph"><h2>Pollution risk map</h2><span class="sub" id="mapSub"></span>
+      <span class="sp tg" id="mapView"><button data-v="cam" class="on">Góc camera</button><button data-v="gis">Bản đồ GIS</button></span>
+      <span class="layer r">REASONING</span></div>
+    <div class="pb">
+      <div class="tg" id="mapLayers">
+        <button data-k="heat" class="on">Heatmap</button>
+        <button data-k="zones" class="on">Vùng rủi ro</button>
+        <button data-k="traj" class="on">Quỹ đạo</button>
+        <button data-k="flow" class="on">Hướng dòng</button>
+      </div>
+      <div class="mapbody">
+        <div class="mapwrap" id="mapwrap">
+          <canvas id="mapc"></canvas>
+          <div id="gis" hidden></div>
+          <div class="mapctl"><button class="btn" id="resetZoom" hidden>⤢ Toàn cảnh</button></div>
+        </div>
+        <div class="zlist" id="zlist" aria-label="Chi tiết vùng"></div>
+      </div>
+      <div class="maplegend">
+        <span>Mật độ tích luỹ <span class="ramp" style="display:inline-block;vertical-align:middle;margin:0 6px"></span></span>
+        <span><i style="background:rgba(239,68,68,.55)"></i>HIGH</span>
+        <span><i style="background:rgba(245,158,11,.55)"></i>MEDIUM</span>
+        <span><i style="background:rgba(234,179,8,.45)"></i>LOW</span>
+        <span><i style="background:var(--cyan);height:3px"></i>Quỹ đạo</span>
+        <span style="color:var(--amber)">➜ Hướng dòng (đã bù chuyển động camera)</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel queue" aria-label="Hàng đợi ưu tiên">
+    <div class="ph"><h2>Ưu tiên thu gom</h2>
+      <span class="sp tg" id="qScope"><button data-s="all" class="on">Toàn mạng</button><button data-s="cam">Camera này</button></span>
+      <span class="layer d">DECISION</span></div>
+    <div class="pb" style="padding:4px 8px;overflow:auto">
+      <table><thead><tr><th>#</th><th>Vùng</th><th>Nguy cơ</th><th>ETA</th><th>Ưu tiên</th></tr></thead>
+        <tbody id="qBody"></tbody></table>
+      <div class="foot-note" style="padding:0 6px">Bấm một dòng → chọn camera và phóng tới vùng trên bản đồ.</div>
+    </div>
+  </section>
+
+  <div class="stats">
+    <section class="panel chart" aria-label="Xu hướng ô nhiễm">
+      <div class="ph"><h2>Xu hướng ô nhiễm</h2><span class="sub">vật thể / frame theo thời gian</span><span class="sp layer r">REASONING</span></div>
+      <div class="pb" id="trend"></div>
+    </section>
+    <section class="panel comp" aria-label="Thành phần rác">
+      <div class="ph"><h2>Thành phần rác</h2><span class="sp layer p">PERCEPTION</span></div>
+      <div class="pb" id="comp"></div>
+    </section>
+    <section class="panel" aria-label="Dòng chảy và chuyển động">
+      <div class="ph"><h2>Dòng / chuyển động</h2><span class="sp layer r">REASONING</span></div>
+      <div class="pb" id="flow"></div>
+    </section>
+    <section class="panel" aria-label="Chỉ số">
+      <div class="ph"><h2>Chỉ số phiên</h2></div>
+      <div class="pb"><div class="kpil" id="kpis"></div></div>
+    </section>
+  </div>
+</main>
+
+<!-- =================== ANALYTICS =================== -->
+<main class="ana" id="ana" hidden>
+  <section class="panel full"><div class="ph"><h2>Toàn mạng lưới</h2><span class="sub" id="anaSub"></span></div>
+    <div class="pb"><div class="ktiles" id="anaTiles"></div></div></section>
+  <section class="panel full"><div class="ph"><h2>So sánh camera</h2><span class="sp muted">bấm dòng để mở ở chế độ Vận hành</span></div>
+    <div class="pb scroll"><table><thead><tr><th>Camera</th><th>Trạng thái</th><th>Thời lượng</th><th>Vật thể</th>
+      <th>Mật độ / frame</th><th>Track</th><th>Vùng HIGH</th><th>Nguy cơ max</th><th>Vùng top</th><th>Thành phần</th><th>FPS xử lý</th></tr></thead>
+      <tbody id="cmpBody"></tbody></table></div></section>
+  <section class="panel"><div class="ph"><h2>Nguy cơ theo camera</h2><span class="sp layer d">DECISION</span></div>
+    <div class="pb" id="riskByCam"></div></section>
+  <section class="panel"><div class="ph"><h2>Lịch sử hotspot</h2><span class="sub">các vùng ≥ MEDIUM</span></div>
+    <div class="pb scroll"><table><thead><tr><th>Camera</th><th>Vùng</th><th>Nguy cơ</th><th>Mật độ Δ</th><th>Hội tụ</th><th>Ưu tiên</th></tr></thead>
+      <tbody id="hotHist"></tbody></table></div></section>
+  <section class="panel"><div class="ph"><h2>Xu hướng theo camera</h2><span class="sub">vật thể / frame, trung bình trượt</span></div>
+    <div class="pb chart" id="multiTrend"></div></section>
+  <section class="panel"><div class="ph"><h2>Báo cáo &amp; đánh giá</h2></div>
+    <div class="pb">
+      <div class="exports">
+        <button class="btn" id="expQueue">⬇ CSV hàng đợi ưu tiên</button>
+        <button class="btn" id="expCmp">⬇ CSV so sánh camera</button>
+        <button class="btn" id="expJson">⬇ JSON đầy đủ</button>
+      </div>
+      <p class="muted" style="margin:12px 0 4px">Chỉ số cần tập test có nhãn (sẽ có sau khi gán nhãn / fine-tune trên RiSID):</p>
+      <table><tbody>
+        <tr><td>Detection</td><td class="muted">Precision · Recall · mAP@50 · mAP@50:95</td><td class="dim">N/A</td></tr>
+        <tr><td>Tracking</td><td class="muted">IDF1 · MOTA · HOTA</td><td class="dim">N/A</td></tr>
+        <tr><td>Prediction</td><td class="muted">MAE · RMSE · hotspot P/R</td><td class="dim">N/A</td></tr>
+        <tr><td>Early warning</td><td class="muted">Top-1/Top-3 recall · lead time</td><td class="dim">N/A</td></tr>
+        <tr><td>System</td><td class="muted">FPS xử lý</td><td id="sysFps"></td></tr>
+      </tbody></table>
+    </div></section>
+</main>
+
+<footer id="foot"></footer>
+
+<script>
+const RG = /*__DATA__*/;
+
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct = v => Math.round((v || 0) * 100) + '%';
+const mmss = s => { s = Math.max(0, Math.floor(s || 0)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+const PRIO_COLOR = {HIGH:'#ef4444', MEDIUM:'#f59e0b', LOW:'#eab308', NONE:'#334155'};
+const PRIO_VI = {HIGH:'CAO', MEDIUM:'TRUNG BÌNH', LOW:'THẤP', NONE:'—'};
+const CAT_COLOR = {Plastic:'#22d3ee', Foam:'#e2e8f0', Organic:'#4ade80', Other:'#a78bfa'};
+const CAT_VI = {Plastic:'Nhựa', Foam:'Xốp', Organic:'Hữu cơ', Other:'Khác'};
+const STATUS_VI = {online:'ONLINE', offline:'OFFLINE', patrolling:'ĐANG TUẦN TRA', maintenance:'BẢO TRÌ'};
+const ARROW = {N:'↑', NE:'↗', E:'→', SE:'↘', S:'↓', SW:'↙', W:'←', NW:'↖'};
+const catMap = {};
+Object.entries(RG.categories || {}).forEach(([c, names]) => names.forEach(n => catMap[n.toLowerCase()] = c));
+const catOf = cls => catMap[String(cls).toLowerCase()] || 'Other';
+function fmtEta(s, horizon) {
+  if (s == null) return `≤ ${Math.round(horizon / 60)} phút`;
+  if (s < 90) return `~${Math.max(1, Math.round(s))} giây`;
+  return `~${(s / 60).toFixed(1)} phút`;
+}
+function fmtChange(p, isNew) {        // readable density trend: +32%, ×4.2, mới xuất hiện
+  if (isNew) return 'mới xuất hiện';
+  if (p == null) return 'chưa đủ dữ liệu';
+  if (p >= 200) return '×' + (1 + p / 100).toFixed(1);
+  return (p > 0 ? '+' : '') + Math.round(p) + '%';
+}
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const camById = id => RG.cameras.find(c => c.id === id);
+const withData = RG.cameras.filter(c => c.a);
+
+/* ================= state ================= */
+const S = {
+  cam: null, mode: 'ops', mapView: 'cam', qScope: 'all', selZone: null,
+  live: {box: true, label: true, trail: true},
+  layers: {heat: true, zones: true, traj: true, flow: true},
+  view: {x0: 0, y0: 0, x1: 1, y1: 1}, target: {x0: 0, y0: 0, x1: 1, y1: 1},
+  base: null, heat: null, rawOk: false,
+};
+
+/* ================= header ================= */
+function tickClock() {
+  const d = new Date();
+  $('#clock').textContent = d.toLocaleTimeString('vi-VN', {hour12: false});
+}
+setInterval(tickClock, 1000); tickClock();
+const onlineN = RG.cameras.filter(c => c.status === 'online' || c.status === 'patrolling').length;
+$('#onlineCount').textContent = `${onlineN}/${RG.cameras.length} nguồn hoạt động`;
+$$('.modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+function setMode(m) {
+  S.mode = m;
+  $$('.modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  $('#ops').hidden = m !== 'ops'; $('#ana').hidden = m !== 'ana';
+  if (m === 'ops') { resizeCanvases(); } else { renderAnalytics(); }
+}
+
+/* ================= camera list ================= */
+function renderCams() {
+  const box = $('#camList'); box.innerHTML = '';
+  RG.cameras.forEach(c => {
+    const a = c.a, off = !a;
+    const hot = a ? a.kpis.hotspots : 0;
+    const risk = a ? a.kpis.max_risk : 0;
+    const pr = a && a.hotspot ? a.hotspot.priority : 'NONE';
+    const el = document.createElement('button');
+    el.className = 'cam' + (S.cam === c ? ' sel' : '');
+    el.setAttribute('aria-disabled', off ? 'true' : 'false');
+    el.title = off ? 'Chưa có luồng video' : `Chọn ${c.name}`;
+    el.innerHTML = `<span class="sd ${esc(c.status)}"></span>
+      <span><span class="nm">${c.type === 'drone' ? '🛸 ' : ''}${esc(c.name)}</span><br>
+      <span class="st">${esc(STATUS_VI[c.status] || c.status)}${off ? '' : ` · ${hot} hotspot`}</span></span>
+      <span class="rk">${off ? '<span class="dim">—</span>' : `<b class="num" style="color:${PRIO_COLOR[pr]}">${pct(risk)}</b><span class="dim">nguy cơ</span>`}</span>`;
+    if (!off) el.onclick = () => selectCam(c.id);
+    box.appendChild(el);
+  });
+}
+
+/* ================= select camera ================= */
+function selectCam(id, zone) {
+  const c = camById(id); if (!c || !c.a) return;
+  const changed = S.cam !== c;
+  S.cam = c;
+  if (changed) {
+    S.selZone = null; S.view = {x0: 0, y0: 0, x1: 1, y1: 1}; S.target = {...S.view};
+    loadVideo(c); loadBase(c); buildHeat(c);
+    renderCams(); renderOverview(); renderTrend(); renderComp(); renderFlow(); renderKpis(); renderZones();
+    $('#liveName').textContent = `· ${c.name}`;
+    $('#mapSub').textContent = `· ${c.name} · lưới ${c.a.grid[0]}×${c.a.grid[1]} vùng`;
+    $('#ovCam').textContent = `· ${c.name}`;
+    if (gisMap) refreshGis();
+  }
+  renderAlert(); renderQueue();
+  if (zone) focusZone(zone); else if (changed) $('#resetZoom').hidden = true;
+}
+
+/* ================= live video + overlay ================= */
+const video = $('#video'), ov = $('#ov');
+function loadVideo(c) {
+  const m = c.media;
+  $('#liveEmpty').hidden = true;
+  S.rawOk = !!m.raw;
+  const src = m.raw || m.annotated;
+  if (!src) { video.removeAttribute('src'); $('#liveEmpty').hidden = false;
+    $('#liveEmpty').textContent = 'Không có video cho nguồn này'; return; }
+  video.onerror = () => {
+    if (S.rawOk && m.annotated) {         // raw not reachable → burned-in annotated clip
+      S.rawOk = false; video.src = m.annotated; video.play().catch(() => {});
+      $('#liveSrc').textContent = 'Nguồn: video annotated (overlay in sẵn)';
+    } else { $('#liveEmpty').hidden = false; $('#liveEmpty').textContent = 'Không phát được video'; }
+  };
+  video.src = src;
+  $('#liveSrc').textContent = S.rawOk ? 'Overlay vẽ trực tiếp từ kết quả pipeline' : 'Nguồn: video annotated';
+  video.play().catch(() => {});
+  video.addEventListener('canplay', () => video.play().catch(() => {}), {once: true});
+  $('#liveDur').textContent = mmss(c.meta.duration);
+}
+$$('#liveToggles button').forEach(b => b.onclick = () => { S.live[b.dataset.k] = !S.live[b.dataset.k]; b.classList.toggle('on'); });
+// Autoplay can be blocked (background tab, strict policy) → offer an explicit play control.
+const syncPlayBtn = () => { $('#playBtn').hidden = !video.paused || !video.currentSrc; };
+video.addEventListener('play', syncPlayBtn); video.addEventListener('pause', syncPlayBtn);
+video.addEventListener('loadeddata', syncPlayBtn);
+$('#playBtn').onclick = e => { e.stopPropagation(); video.play().catch(() => {}); };
+$('#stage').onclick = () => { if (video.currentSrc) video.paused ? video.play().catch(() => {}) : video.pause(); };
+
+function fitRect(iw, ih, cw, ch) {
+  const s = Math.min(cw / iw, ch / ih); const w = iw * s, h = ih * s;
+  return {x: (cw - w) / 2, y: (ch - h) / 2, w, h};
+}
+function sizeCanvas(cv) {
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(r.width * d) || cv.height !== Math.round(r.height * d)) {
+    cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  }
+  return {w: r.width, h: r.height, d};
+}
+function resizeCanvases() { sizeCanvas(ov); sizeCanvas($('#mapc')); if (gisMap) gisMap.invalidateSize(); }
+new ResizeObserver(resizeCanvases).observe(document.body);
+
+function sampleAt(ovl, t) {            // last sample with time <= t (binary search)
+  let lo = 0, hi = ovl.length - 1, r = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (ovl[m][0] <= t) { r = m; lo = m + 1; } else hi = m - 1; }
+  return r;
+}
+function boxesAt(c, t) {
+  const ovl = c.a.overlay, i = sampleAt(ovl, t);
+  if (i < 0) return [];
+  const [t0, b0] = ovl[i], nxt = ovl[i + 1];
+  const hold = 1.6 / Math.max(0.1, c.a.proc_fps);
+  const out = [];
+  for (const b of b0) {
+    if (nxt && b[0] != null) {
+      const m = nxt[1].find(x => x[0] === b[0]);
+      if (m && t <= nxt[0]) {           // interpolate same track between samples
+        const k = (t - t0) / Math.max(1e-6, nxt[0] - t0);
+        out.push([b[0], b[1], b[2], ...[3, 4, 5, 6].map(j => b[j] + (m[j] - b[j]) * k)]);
+        continue;
+      }
+    }
+    if (t - t0 <= hold) out.push(b);
+  }
+  return out;
+}
+function drawArrowHead(ctx, x0, y0, x1, y1, size) {
+  const a = Math.atan2(y1 - y0, x1 - x0);
+  ctx.beginPath(); ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - size * Math.cos(a - 0.45), y1 - size * Math.sin(a - 0.45));
+  ctx.lineTo(x1 - size * Math.cos(a + 0.45), y1 - size * Math.sin(a + 0.45));
+  ctx.closePath(); ctx.fill();
+}
+function drawLive() {
+  const c = S.cam; if (!c) return;
+  const {w, h, d} = sizeCanvas(ov), ctx = ov.getContext('2d');
+  ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, w, h);
+  const t = video.currentTime || 0;
+  $('#liveTime').textContent = mmss(t);
+  const boxes = boxesAt(c, t);
+  $('#liveObjs').textContent = boxes.length; $('#tObj').textContent = boxes.length;
+  $('#liveCnt').textContent = `${boxes.length} vật thể`;
+  if (!S.rawOk || !video.videoWidth) return;
+  const R = fitRect(video.videoWidth, video.videoHeight, w, h);
+  const X = nx => R.x + nx * R.w, Y = ny => R.y + ny * R.h;
+  if (S.live.trail) {                    // recent trajectory tails (last 6 s)
+    for (const [id, tr] of Object.entries(c.a.trajectories)) {
+      const pts = tr.pts.filter(p => p[0] <= t && p[0] >= t - 6);
+      if (pts.length < 2) continue;
+      const col = CAT_COLOR[catOf(tr.cls)];
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(X(p[1]), Y(p[2])) : ctx.moveTo(X(p[1]), Y(p[2]))); ctx.stroke();
+      const p1 = pts[pts.length - 2], p2 = pts[pts.length - 1];
+      drawArrowHead(ctx, X(p1[1]), Y(p1[2]), X(p2[1]), Y(p2[2]), 7);
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.font = '600 11px system-ui';
+  for (const b of boxes) {
+    const col = CAT_COLOR[catOf(b[1])];
+    const x = X(b[3]), y = Y(b[4]), bw = X(b[5]) - x, bh = Y(b[6]) - y;
+    if (S.live.box) { ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(x, y, bw, bh); }
+    if (S.live.label) {
+      const txt = `${b[1]}${b[0] != null ? ' · #' + b[0] : ''} · ${b[2].toFixed(2)}`;
+      const tw = ctx.measureText(txt).width + 8;
+      ctx.fillStyle = 'rgba(2,6,13,.78)'; ctx.fillRect(x, Math.max(0, y - 17), tw, 16);
+      ctx.fillStyle = col; ctx.fillText(txt, x + 4, Math.max(12, y - 5));
+    }
+  }
+}
+
+/* ================= overview + alert ================= */
+function renderOverview() {
+  const a = S.cam.a;
+  $('#tHot').textContent = a.kpis.hotspots;
+  $('#tRisk').textContent = pct(a.kpis.max_risk);
+  $('#tRisk').style.color = PRIO_COLOR[a.hotspot ? a.hotspot.priority : 'NONE'];
+  const netHot = withData.reduce((s, c) => s + c.a.kpis.hotspots, 0);
+  $('#netLine').innerHTML = `Toàn mạng: <b>${onlineN}</b> nguồn hoạt động · <b style="color:var(--red)">${netHot}</b> vùng hotspot · <b>${RG.totals.detections}</b> vật thể`;
+}
+function renderAlert() {
+  const c = S.cam, a = c.a, h = a.hotspot, el = $('#alert'), body = $('#alertBody');
+  el.className = 'panel alert ' + (h ? h.priority : '');
+  const horizonMin = Math.round(a.horizon_s / 60);
+  // Is there a stronger hotspot elsewhere in the network?
+  const better = RG.queue.find(q => q.cam !== c.id && q.risk > (h ? h.risk : 0) && q.priority === 'HIGH');
+  const betterHtml = better ? `<div class="other-hot" id="gotoBetter">⚠ Nguy cơ cao hơn tại <b>${esc(better.cam_name)}</b> · Vùng ${esc(better.zone)} (${pct(better.risk)}) → xem</div>` : '';
+  if (!h) {
+    body.innerHTML = `<div class="al-head" style="color:var(--teal)">● KHÔNG CÓ HOTSPOT</div>
+      <p class="muted">Chưa phát hiện vùng có nguy cơ tích tụ tại ${esc(c.name)}.</p>${betterHtml}`;
+  } else {
+    const w = h.why, flow = w.flow;
+    const dens = fmtChange(w.density_change_pct, w.new_activity);
+    const densIc = w.new_activity || (w.density_change_pct || 0) > 0 ? '↑' : ((w.density_change_pct || 0) < 0 ? '↓' : '•');
+    const flowTxt = flow && flow.compass
+      ? `${ARROW[flow.compass]} ${flow.compass}${c.heading_deg == null ? ' <span class="dim">(theo khung hình)</span>' : ''}`
+      : '<span class="dim">chưa đủ dữ liệu</span>';
+    const head = h.priority === 'HIGH' ? 'HOTSPOT DỰ BÁO' : (h.priority === 'MEDIUM' ? 'CẢNH BÁO THEO DÕI' : 'VÙNG CẦN LƯU Ý');
+    body.innerHTML = `
+      <div class="al-head"><span class="pulse"></span>${head}</div>
+      <div class="al-zone">VÙNG ${esc(h.id)}<small>${esc(c.name)}</small></div>
+      <div class="al-big"><b class="num">${pct(h.risk)}</b><span class="muted">nguy cơ tích tụ<br>trong ${horizonMin} phút tới</span></div>
+      <div class="al-meta">
+        <span>${h.eta_s != null ? `Rác đang trôi tới vùng sau: <b>${fmtEta(h.eta_s, a.horizon_s)}</b>` : 'Rác <b>đang hiện diện</b> trong vùng'}</span>
+        <span>Mức ưu tiên: <span class="pr ${h.priority}">${h.priority}</span></span>
+      </div>
+      <div class="why"><h4>VÌ SAO?</h4>
+        <div class="row"><span class="ic">${densIc}</span><span>Mật độ rác <span class="dim">(nửa sau so với nửa đầu phiên)</span></span><b>${dens}</b></div>
+        <div class="row"><span class="ic">→</span><span>Xu hướng hội tụ <span class="dim">(${h.inflow} vào · ${h.outflow} ra)</span></span><b>${PRIO_VI[w.convergence_level] || '—'}</b></div>
+        <div class="row"><span class="ic">⤳</span><span>Hướng dòng</span><b>${flowTxt}</b></div>
+        <div class="row"><span class="ic">●</span><span>Độ tin cậy <span class="dim">(${h.n_tracks} track · điểm detector TB ${h.mean_score.toFixed(2)})</span></span><b>${w.confidence.toFixed(2)}</b></div>
+      </div>
+      <div style="margin-top:10px"><button class="btn" id="showZone">Xem vùng ${esc(h.id)} trên bản đồ</button></div>
+      ${betterHtml}
+      <div class="foot-note">Nguy cơ = điểm tổng hợp (mật độ ${RG.weights.density} · hội tụ ${RG.weights.convergence} · tin cậy ${RG.weights.confidence}), chưa phải xác suất đã hiệu chuẩn.</div>`;
+    $('#showZone').onclick = () => { setMapView('cam'); focusZone(h.id); };
+  }
+  if (better) $('#gotoBetter').onclick = () => selectCam(better.cam, better.zone);
+}
+
+/* ================= priority queue ================= */
+$$('#qScope button').forEach(b => b.onclick = () => {
+  S.qScope = b.dataset.s; $$('#qScope button').forEach(x => x.classList.toggle('on', x === b)); renderQueue();
+});
+function renderQueue() {
+  const rows = (S.qScope === 'all' ? RG.queue : RG.queue.filter(q => q.cam === S.cam.id)).slice(0, 10);
+  const tb = $('#qBody');
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="5" class="qempty">Không có vùng cần thu gom</td></tr>`; return; }
+  tb.innerHTML = rows.map((q, i) => `
+    <tr tabindex="0" data-cam="${esc(q.cam)}" data-zone="${esc(q.zone)}"
+        class="${q.cam === S.cam.id ? 'cur' : ''} ${q.cam === S.cam.id && q.zone === S.selZone ? 'selz' : ''}">
+      <td class="num dim">${String(i + 1).padStart(2, '0')}</td>
+      <td><b>Vùng ${esc(q.zone)}</b> <span class="muted">· ${esc(q.cam_name)}</span></td>
+      <td><span class="rbar"><span class="b"><i style="width:${pct(q.risk)};background:${PRIO_COLOR[q.priority]}"></i></span><span class="num">${pct(q.risk)}</span></span></td>
+      <td class="num ${q.eta_s == null ? 'dim' : ''}" title="${q.eta_s == null ? 'Chưa quan sát rác trôi vào vùng — cảnh báo theo khung dự báo' : 'Thời gian rác đang trôi tới vùng (khoảng cách ÷ tốc độ trôi)'}">${fmtEta(q.eta_s, RG.horizon_s)}</td>
+      <td><span class="pr ${q.priority}">${q.priority}</span></td>
+    </tr>`).join('');
+  $$('#qBody tr[tabindex]').forEach(tr => {
+    const go = () => { setMapView('cam'); selectCam(tr.dataset.cam, tr.dataset.zone); };
+    tr.onclick = go; tr.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+  });
+}
+
+/* ================= risk map (camera view) ================= */
+const mapc = $('#mapc');
+$$('#mapLayers button').forEach(b => b.onclick = () => { S.layers[b.dataset.k] = !S.layers[b.dataset.k]; b.classList.toggle('on'); });
+$$('#mapView button').forEach(b => b.onclick = () => setMapView(b.dataset.v));
+$('#resetZoom').onclick = () => { S.selZone = null; S.target = {x0: 0, y0: 0, x1: 1, y1: 1}; $('#resetZoom').hidden = true; renderQueue(); renderZones(); };
+function setMapView(v) {
+  S.mapView = v;
+  $$('#mapView button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  $('#gis').hidden = v !== 'gis'; mapc.style.visibility = v === 'gis' ? 'hidden' : 'visible';
+  $('#mapLayers').style.visibility = v === 'gis' ? 'hidden' : 'visible';
+  if (v === 'gis') initGis(); else $('#resetZoom').hidden = !S.selZone;
+}
+function loadBase(c) {
+  S.base = null;
+  if (!c.media.base) return;
+  const img = new Image(); img.onload = () => { if (S.cam === c) S.base = img; }; img.src = c.media.base;
+}
+function heatColor(v) {                  // cyan → yellow → amber → red
+  const st = [[0, [34, 211, 238, 0]], [0.25, [34, 211, 238, .30]], [0.5, [234, 179, 8, .5]], [0.75, [245, 158, 11, .62]], [1, [239, 68, 68, .78]]];
+  for (let i = 1; i < st.length; i++) if (v <= st[i][0]) {
+    const [a, ca] = st[i - 1], [b, cb] = st[i], k = (v - a) / (b - a);
+    return ca.map((x, j) => x + (cb[j] - x) * k);
+  }
+  return st[st.length - 1][1];
+}
+function buildHeat(c) {
+  S.heat = null; const g = c.grid; if (!g || !g.length) return;
+  const gh = g.length, gw = g[0].length, cv = document.createElement('canvas');
+  cv.width = gw; cv.height = gh; const ctx = cv.getContext('2d'), im = ctx.createImageData(gw, gh);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    const v = g[y][x] < 0.04 ? 0 : g[y][x], [r, gg, b, al] = heatColor(v), o = (y * gw + x) * 4;
+    im.data[o] = r; im.data[o + 1] = gg; im.data[o + 2] = b; im.data[o + 3] = Math.round(al * 255);
+  }
+  ctx.putImageData(im, 0, 0); S.heat = cv;
+}
+function renderZones() {
+  const a = S.cam.a, hot = a.hotspot ? a.hotspot.id : null;
+  const zs = [...a.zones].sort((p, q) => q.risk - p.risk);
+  $('#zlist').innerHTML = `<h3>CHI TIẾT VÙNG · ${esc(S.cam.name)}</h3>` + zs.map(z => {
+    const col = PRIO_COLOR[z.priority];
+    const flow = z.flow ? `${ARROW[z.flow.compass]} ${z.flow.compass}` : '—';
+    return `<button class="zi ${z.id === S.selZone ? 'sel' : ''} ${z.id === hot ? 'hot' : ''}" data-z="${esc(z.id)}" ${z.risk > 0 ? '' : 'style="opacity:.5"'}>
+      <span class="zn" style="color:${z.risk > 0 ? col : 'var(--dim)'}">${esc(z.id)}</span>
+      <span class="zb"><i style="width:${pct(z.risk)};background:${col}"></i></span>
+      <b class="num" style="color:${z.risk > 0 ? col : 'var(--dim)'}">${pct(z.risk)}</b>
+      <span class="zm">hội tụ ${PRIO_VI[z.convergence_level] || '—'} · dòng ${flow} · ${z.objects_per_frame} vật/frame</span>
+    </button>`;
+  }).join('');
+  $$('#zlist .zi').forEach(b => b.onclick = () => { setMapView('cam'); focusZone(b.dataset.z); });
+}
+function focusZone(zid) {
+  const z = S.cam.a.zones.find(q => q.id === zid); if (!z) return;
+  S.selZone = zid;
+  const [x0, y0, x1, y1] = z.bounds, pw = (x1 - x0) * 0.35, ph = (y1 - y0) * 0.35;
+  S.target = {x0: Math.max(0, x0 - pw), y0: Math.max(0, y0 - ph), x1: Math.min(1, x1 + pw), y1: Math.min(1, y1 + ph)};
+  $('#resetZoom').hidden = false; renderQueue(); renderZones();
+  $('#mapwrap').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+function drawMap(now) {
+  const c = S.cam; if (!c || S.mapView !== 'cam') return;
+  const {w, h, d} = sizeCanvas(mapc), ctx = mapc.getContext('2d');
+  ctx.setTransform(d, 0, 0, d, 0, 0); ctx.clearRect(0, 0, w, h);
+  for (const k of ['x0', 'y0', 'x1', 'y1']) S.view[k] += (S.target[k] - S.view[k]) * 0.14;   // smooth zoom
+  const [iw, ih] = c.a.frame_size, V = S.view;
+  const R = fitRect((V.x1 - V.x0) * iw, (V.y1 - V.y0) * ih, w, h), sc = R.w / ((V.x1 - V.x0) * iw);
+  const X = nx => R.x + (nx - V.x0) * iw * sc, Y = ny => R.y + (ny - V.y0) * ih * sc;
+  const full = {x: X(0), y: Y(0), w: iw * sc, h: ih * sc};
+  ctx.save(); ctx.beginPath(); ctx.rect(R.x, R.y, R.w, R.h); ctx.clip();
+  if (S.base) { ctx.globalAlpha = 0.72; ctx.drawImage(S.base, full.x, full.y, full.w, full.h); ctx.globalAlpha = 1; }
+  else { ctx.fillStyle = '#081222'; ctx.fillRect(full.x, full.y, full.w, full.h); }
+  if (S.layers.heat && S.heat) { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(S.heat, full.x, full.y, full.w, full.h); }
+
+  const a = c.a, hot = a.hotspot ? a.hotspot.id : null;
+  if (S.layers.zones) {
+    for (const z of a.zones) {
+      const [x0, y0, x1, y1] = z.bounds, zx = X(x0), zy = Y(y0), zw = X(x1) - zx, zh = Y(y1) - zy;
+      if (z.risk > 0) { ctx.fillStyle = PRIO_COLOR[z.priority] + (z.priority === 'HIGH' ? '2e' : '1c'); ctx.fillRect(zx, zy, zw, zh); }
+      ctx.setLineDash(z.id === hot || z.id === S.selZone ? [] : [4, 5]);
+      ctx.lineWidth = z.id === S.selZone ? 2.5 : (z.id === hot ? 2 : 1);
+      ctx.strokeStyle = z.id === S.selZone ? '#22d3ee' : (z.id === hot ? '#ef4444' : 'rgba(128,149,184,.35)');
+      ctx.strokeRect(zx + .5, zy + .5, zw - 1, zh - 1); ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(2,6,13,.72)'; ctx.fillRect(zx + 6, zy + 6, z.risk > 0 ? 64 : 22, 20);
+      ctx.fillStyle = z.risk > 0 ? PRIO_COLOR[z.priority] : '#8095b8'; ctx.font = '800 12px system-ui';
+      ctx.fillText(z.id, zx + 11, zy + 20);
+      if (z.risk > 0) { ctx.font = '600 11px system-ui'; ctx.fillStyle = '#e5eefb'; ctx.fillText(pct(z.risk), zx + 28, zy + 20); }
+    }
+  }
+  if (S.layers.traj) {
+    for (const tr of Object.values(a.trajectories)) {
+      const col = CAT_COLOR[catOf(tr.cls)], p = tr.pts;
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.6; ctx.globalAlpha = .8;
+      ctx.beginPath(); p.forEach((q, k) => k ? ctx.lineTo(X(q[1]), Y(q[2])) : ctx.moveTo(X(q[1]), Y(q[2]))); ctx.stroke();
+      const q1 = p[p.length - 2], q2 = p[p.length - 1];
+      drawArrowHead(ctx, X(q1[1]), Y(q1[2]), X(q2[1]), Y(q2[2]), 6); ctx.globalAlpha = 1;
+    }
+  }
+  if (S.layers.flow) {
+    for (const z of a.zones) if (z.flow) {
+      const [x0, y0, x1, y1] = z.bounds, cx = X((x0 + x1) / 2), cy = Y((y0 + y1) / 2);
+      const L = Math.min(X(x1) - X(x0), Y(y1) - Y(y0)) * 0.32, ex = cx + z.flow.ux * L, ey = cy + z.flow.uy * L;
+      ctx.strokeStyle = '#f59e0b'; ctx.fillStyle = '#f59e0b'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx - z.flow.ux * L * .4, cy - z.flow.uy * L * .4); ctx.lineTo(ex, ey); ctx.stroke();
+      drawArrowHead(ctx, cx, cy, ex, ey, 11);
+    }
+  }
+  ctx.restore();
+  if (hot) {                              // pulsing hotspot marker (drawn unclipped so the label never gets cut)
+    const z = a.zones.find(q => q.id === hot), [x0, y0, x1, y1] = z.bounds;
+    const cx = X((x0 + x1) / 2), cy = Y((y0 + y1) / 2), ph = (now / 1400) % 1;
+    const col = PRIO_COLOR[z.priority];
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.globalAlpha = 1 - ph; ctx.beginPath(); ctx.arc(cx, cy, 10 + ph * 34, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 7); ctx.fill();
+    ctx.font = '800 11px system-ui'; const label = `HOTSPOT ${z.id} · ${pct(z.risk)}`, tw = ctx.measureText(label).width + 12;
+    const lx = cx + 12 + tw > w - 6 ? cx - 12 - tw : cx + 12;
+    ctx.fillStyle = 'rgba(2,6,13,.88)'; ctx.fillRect(lx, cy - 11, tw, 22);
+    ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.strokeRect(lx + .5, cy - 10.5, tw - 1, 21);
+    ctx.fillStyle = col; ctx.fillText(label, lx + 6, cy + 4);
+  }
+  // camera viewpoint marker
+  ctx.fillStyle = 'rgba(2,6,13,.8)'; ctx.fillRect(10, h - 30, 150, 22);
+  ctx.fillStyle = '#22d3ee'; ctx.font = '600 11px system-ui'; ctx.fillText(`📷 ${c.name} · góc nhìn camera`, 16, h - 15);
+  if (!S.base && !S.heat) { ctx.fillStyle = '#8095b8'; ctx.fillText('Chưa có ảnh nền cho nguồn này', w / 2 - 80, h / 2); }
+}
+
+/* ================= GIS view (Leaflet, needs internet for tiles) ================= */
+let gisMap = null, gisLayer = null;
+function initGis() {
+  if (gisMap) { setTimeout(() => gisMap.invalidateSize(), 50); refreshGis(); return; }
+  if (!window.L) {
+    $('#gis').innerHTML = '<div class="gis-empty">Bản đồ GIS cần kết nối Internet (thư viện Leaflet + nền bản đồ).<br>Chế độ Góc camera vẫn hoạt động offline.</div>';
+    return;
+  }
+  const pts = RG.cameras.filter(c => c.lat != null && c.lon != null);
+  if (!pts.length) { $('#gis').innerHTML = '<div class="gis-empty">Chưa khai báo toạ độ camera trong configs/cameras.yaml</div>'; return; }
+  gisMap = L.map('gis', {zoomControl: true, attributionControl: true});
+  // Key-free basemaps: OSM (darkened via CSS to match the control-centre theme) + Esri satellite.
+  const street = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, className: 'osm-dark', attribution: '&copy; OpenStreetMap contributors'});
+  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Tiles &copy; Esri — Esri, Maxar, Earthstar Geographics'});
+  street.addTo(gisMap);
+  L.control.layers({'Bản đồ': street, 'Vệ tinh': sat}, null, {position: 'topleft'}).addTo(gisMap);
+  gisMap.fitBounds(L.latLngBounds(pts.map(c => [c.lat, c.lon])).pad(0.35));
+  refreshGis();
+}
+function refreshGis() {
+  if (!gisMap) return;
+  if (gisLayer) gisLayer.remove();
+  gisLayer = L.layerGroup().addTo(gisMap);
+  RG.cameras.filter(c => c.lat != null).forEach(c => {
+    const pr = c.a && c.a.hotspot ? c.a.hotspot.priority : 'NONE';
+    const col = c.a ? PRIO_COLOR[pr] : '#475569';
+    if (pr === 'HIGH') L.marker([c.lat, c.lon], {interactive: false,
+      icon: L.divIcon({className: '', html: '<div class="gis-pulse"></div>', iconSize: [22, 22], iconAnchor: [11, 11]})}).addTo(gisLayer);
+    const m = L.circleMarker([c.lat, c.lon], {radius: S.cam === c ? 11 : 8, color: S.cam === c ? '#22d3ee' : col,
+      weight: S.cam === c ? 3 : 2, fillColor: col, fillOpacity: .85}).addTo(gisLayer);
+    const hs = c.a && c.a.hotspot;
+    m.bindTooltip(`<b>${esc(c.name)}</b> · ${esc(STATUS_VI[c.status] || c.status)}<br>` +
+      (c.a ? `Nguy cơ cao nhất: <b>${pct(c.a.kpis.max_risk)}</b>${hs ? ` · Vùng ${esc(hs.id)}` : ''}` : 'Chưa có luồng video') +
+      (c.placeholder ? '<br><i>Vị trí minh hoạ — cập nhật toạ độ thật</i>' : ''));
+    if (c.a) m.on('click', () => selectCam(c.id));
+  });
+}
+
+/* ================= stats row ================= */
+function linePath(pts, X, Y) { return pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' '); }
+function rolling(arr, k) { return arr.map((p, i) => { const s = arr.slice(Math.max(0, i - k + 1), i + 1); return [p[0], s.reduce((a, q) => a + q[1], 0) / s.length]; }); }
+let trendGeom = null;
+function renderTrend() {
+  const tr = S.cam.a.trend, box = $('#trend');
+  if (tr.length < 2) { box.innerHTML = '<p class="muted">Chưa đủ dữ liệu</p>'; trendGeom = null; return; }
+  const W = 640, H = 170, pl = 30, pr = 10, pt = 10, pb = 22;
+  const t0 = tr[0][0], t1 = tr[tr.length - 1][0], ymax = Math.max(1, ...tr.map(p => p[1]));
+  const X = t => pl + (t - t0) / Math.max(1e-6, t1 - t0) * (W - pl - pr), Y = v => H - pb - v / ymax * (H - pt - pb);
+  const sm = rolling(tr, 7);
+  const area = linePath(sm, X, Y) + ` L${X(t1)} ${H - pb} L${X(t0)} ${H - pb} Z`;
+  const ticks = [0, .5, 1].map(f => { const v = ymax * f; return `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="#18294a"/><text x="${pl - 6}" y="${Y(v) + 3}" fill="#51668a" font-size="10" text-anchor="end">${Math.round(v)}</text>`; }).join('');
+  const xt = [0, .25, .5, .75, 1].map(f => { const t = t0 + (t1 - t0) * f; return `<text x="${X(t)}" y="${H - 6}" fill="#51668a" font-size="10" text-anchor="middle">${mmss(t)}</text>`; }).join('');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Xu hướng số vật thể theo thời gian">
+    <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".35"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/></linearGradient></defs>
+    ${ticks}${xt}
+    <path d="${linePath(tr, X, Y)}" fill="none" stroke="#51668a" stroke-width="1" opacity=".6"/>
+    <path d="${area}" fill="url(#tg)"/><path d="${linePath(sm, X, Y)}" fill="none" stroke="#22d3ee" stroke-width="2"/>
+    <line id="playhead" x1="0" x2="0" y1="${pt}" y2="${H - pb}" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3 3"/>
+  </svg><div class="maplegend" style="margin-top:4px"><span><i style="background:#22d3ee;height:3px"></i>trung bình trượt</span><span><i style="background:#51668a;height:2px"></i>từng frame</span><span style="color:var(--amber)">┆ vị trí video đang phát</span></div>`;
+  trendGeom = {X, t0, t1};
+}
+function renderComp() {
+  const comp = S.cam.a.composition, box = $('#comp');
+  if (!comp.length) { box.innerHTML = '<p class="muted">Chưa có vật thể</p>'; return; }
+  box.innerHTML = comp.map(c => `<div class="row"><span>${esc(CAT_VI[c.category] || c.category)}</span>
+    <span class="bar"><i style="width:${c.pct}%;background:${CAT_COLOR[c.category] || '#a78bfa'}"></i></span>
+    <b class="num" style="text-align:right">${c.pct}%</b></div>`).join('') +
+    `<div class="foot-note">${S.cam.a.kpis.detections} lượt phát hiện · gộp nhãn theo configs/default.yaml → categories</div>`;
+}
+function renderFlow() {
+  const m = S.cam.a.motion, box = $('#flow'), ok = m.enough_data && m.compass;
+  const deg = ok ? m.deg : 0;
+  const dial = `<svg viewBox="-60 -60 120 120" aria-hidden="true">
+    <circle r="52" fill="#0a1322" stroke="#223a63"/>
+    ${[0, 45, 90, 135, 180, 225, 270, 315].map(a => `<line x1="0" y1="-52" x2="0" y2="${a % 90 ? -46 : -42}" stroke="#223a63" transform="rotate(${a})"/>`).join('')}
+    <text y="-32" fill="#8095b8" font-size="10" text-anchor="middle">N</text><text x="36" y="4" fill="#51668a" font-size="10" text-anchor="middle">E</text>
+    <text y="42" fill="#51668a" font-size="10" text-anchor="middle">S</text><text x="-36" y="4" fill="#51668a" font-size="10" text-anchor="middle">W</text>
+    ${ok ? `<g transform="rotate(${deg})"><line y1="18" y2="-34" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/><path d="M0 -44 L-8 -30 L8 -30 Z" fill="#f59e0b"/></g>` : '<circle r="4" fill="#51668a"/>'}
+  </svg>`;
+  const speed = m.speed_m_s != null ? `${m.speed_m_s} m/s` : (m.speed_px_s != null ? `${m.speed_px_s} px/s` : '—');
+  box.innerHTML = `<div class="flowbox">${dial}<div class="fv">` + (ok ? `
+      <b class="num">${speed}</b><span class="muted">tốc độ trôi TB${m.calibrated ? '' : ' (chưa hiệu chuẩn m/px)'}</span>
+      <div style="margin-top:6px">${ARROW[m.compass]} <b>${m.compass}</b> ${S.cam.heading_deg == null ? '<span class="dim">theo khung hình</span>' : ''}</div>
+      <div class="muted">độ đồng hướng ${m.coherence}</div>` : `
+      <b class="dim">—</b><span class="muted">Chưa đủ dữ liệu chuyển động (${m.n_vectors} vector)</span>
+      <div class="foot-note">Cần detector ổn định hơn giữa các frame để nối quỹ đạo.</div>`) +
+    `</div></div><div class="foot-note">${m.n_vectors} vector · ${m.compensated ? 'đã bù chuyển động camera (median)' : 'chưa bù chuyển động camera'}</div>`;
+}
+function renderKpis() {
+  const a = S.cam.a, c = S.cam;
+  const cells = [
+    [a.kpis.detections, 'lượt phát hiện'], [a.kpis.unique_tracks, 'track (ID) khác nhau'],
+    [a.kpis.density_per_frame, 'mật độ · vật/frame'], [a.kpis.hotspots, 'vùng HIGH'],
+    [mmss(a.duration_s), 'thời lượng phân tích'], [c.meta.pipeline_fps ?? '—', 'FPS xử lý pipeline'],
+  ];
+  $('#kpis').innerHTML = cells.map(([v, l]) => `<div><b class="num">${esc(v)}</b><span>${l}</span></div>`).join('');
+}
+
+/* ================= analytics mode ================= */
+function renderAnalytics() {
+  const cams = withData;
+  const totHot = cams.reduce((s, c) => s + c.a.kpis.hotspots, 0);
+  const dens = cams.length ? (cams.reduce((s, c) => s + c.a.kpis.density_per_frame, 0) / cams.length).toFixed(2) : 0;
+  $('#anaSub').textContent = `· ${cams.length} nguồn có dữ liệu · tạo lúc ${RG.generated_at}`;
+  $('#anaTiles').innerHTML = [[`${onlineN}/${RG.cameras.length}`, 'nguồn hoạt động'], [RG.totals.detections, 'lượt phát hiện'],
+    [totHot, 'vùng hotspot HIGH'], [dens, 'mật độ TB · vật/frame']]
+    .map(([v, l]) => `<div class="tile"><b class="num">${v}</b><span>${l}</span></div>`).join('');
+  $('#cmpBody').innerHTML = RG.cameras.map(c => {
+    const a = c.a;
+    if (!a) return `<tr><td><b>${esc(c.name)}</b></td><td><span class="dim">${esc(STATUS_VI[c.status] || c.status)}</span></td><td colspan="9" class="dim">Chưa có luồng video</td></tr>`;
+    const pr = a.hotspot ? a.hotspot.priority : 'NONE';
+    const stack = a.composition.map(x => `<i title="${esc(CAT_VI[x.category] || x.category)} ${x.pct}%" style="width:${x.pct}%;background:${CAT_COLOR[x.category] || '#a78bfa'}"></i>`).join('');
+    return `<tr tabindex="0" data-cam="${esc(c.id)}"><td><b>${esc(c.name)}</b></td><td>${esc(STATUS_VI[c.status] || c.status)}</td>
+      <td class="num">${mmss(a.duration_s)}</td><td class="num">${a.kpis.detections}</td><td class="num">${a.kpis.density_per_frame}</td>
+      <td class="num">${a.kpis.unique_tracks}</td><td class="num">${a.kpis.hotspots}</td>
+      <td class="num" style="color:${PRIO_COLOR[pr]}">${pct(a.kpis.max_risk)}</td><td>${a.hotspot ? 'Vùng ' + esc(a.hotspot.id) : '—'}</td>
+      <td><span class="stack">${stack}</span></td><td class="num">${c.meta.pipeline_fps ?? '—'}</td></tr>`;
+  }).join('');
+  $$('#cmpBody tr[tabindex]').forEach(tr => {
+    const go = () => { setMode('ops'); selectCam(tr.dataset.cam); };
+    tr.onclick = go; tr.onkeydown = e => { if (e.key === 'Enter') go(); };
+  });
+  const byRisk = [...cams].sort((a, b) => b.a.kpis.max_risk - a.a.kpis.max_risk);
+  $('#riskByCam').innerHTML = byRisk.map(c => { const pr = c.a.hotspot ? c.a.hotspot.priority : 'NONE';
+    return `<div class="hbar"><span>${esc(c.name)}</span><span class="b"><i style="width:${pct(c.a.kpis.max_risk)};background:${PRIO_COLOR[pr]}"></i></span><b class="num">${pct(c.a.kpis.max_risk)}</b></div>`; }).join('')
+    + `<div class="foot-note">Ngưỡng HIGH = ${Math.round(RG.alert_threshold * 100)}% (decision.alert_threshold)</div>`;
+  const hist = cams.flatMap(c => c.a.zones.filter(z => z.priority === 'HIGH' || z.priority === 'MEDIUM').map(z => ({c, z})))
+    .sort((p, q) => q.z.risk - p.z.risk);
+  $('#hotHist').innerHTML = hist.length ? hist.map(({c, z}) => `<tr><td>${esc(c.name)}</td><td><b>${esc(z.id)}</b></td>
+    <td class="num">${pct(z.risk)}</td><td class="num">${fmtChange(z.density_change_pct, z.new_activity)}</td>
+    <td>${PRIO_VI[z.convergence_level] || '—'}</td><td><span class="pr ${z.priority}">${z.priority}</span></td></tr>`).join('')
+    : '<tr><td colspan="6" class="qempty">Chưa có vùng ≥ MEDIUM</td></tr>';
+  // multi-camera trend (normalised time 0..1)
+  const W = 640, H = 190, pl = 30, pb = 20, pt = 10;
+  const palette = ['#22d3ee', '#f59e0b', '#4ade80', '#a78bfa', '#f472b6', '#e2e8f0'];
+  const series = cams.map((c, i) => ({c, col: palette[i % palette.length], pts: rolling(c.a.trend, 9)}));
+  const ymax = Math.max(1, ...series.flatMap(s => s.pts.map(p => p[1])));
+  const paths = series.map(s => { const tr = s.pts; if (tr.length < 2) return '';
+    const t0 = tr[0][0], t1 = tr[tr.length - 1][0];
+    const X = t => pl + (t - t0) / Math.max(1e-6, t1 - t0) * (W - pl - 10), Y = v => H - pb - v / ymax * (H - pt - pb);
+    return `<path d="${linePath(tr, X, Y)}" fill="none" stroke="${s.col}" stroke-width="2"/>`; }).join('');
+  $('#multiTrend').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:190px" role="img" aria-label="Xu hướng theo camera">
+    <line x1="${pl}" x2="${W - 10}" y1="${H - pb}" y2="${H - pb}" stroke="#18294a"/>
+    <text x="${pl - 6}" y="${pt + 4}" fill="#51668a" font-size="10" text-anchor="end">${ymax.toFixed(1)}</text>
+    <text x="${pl}" y="${H - 5}" fill="#51668a" font-size="10">đầu phiên</text><text x="${W - 10}" y="${H - 5}" fill="#51668a" font-size="10" text-anchor="end">cuối phiên</text>
+    ${paths}</svg><div class="maplegend">${series.map(s => `<span><i style="background:${s.col};height:3px"></i>${esc(s.c.name)}</span>`).join('')}</div>`;
+  $('#sysFps').innerHTML = cams.map(c => `${esc(c.name)}: <b>${c.meta.pipeline_fps ?? '—'}</b>`).join(' · ');
+}
+const csv = rows => rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+$('#expQueue').onclick = () => download('riverguard_priority_queue.csv', '﻿' + csv([['#', 'camera', 'zone', 'risk', 'priority', 'eta_s'],
+  ...RG.queue.map((q, i) => [i + 1, q.cam_name, q.zone, q.risk, q.priority, q.eta_s])]), 'text/csv');
+$('#expCmp').onclick = () => download('riverguard_cameras.csv', '﻿' + csv([['camera', 'status', 'duration_s', 'detections', 'density_per_frame', 'unique_tracks', 'high_zones', 'max_risk', 'top_zone'],
+  ...RG.cameras.map(c => c.a ? [c.name, c.status, c.a.duration_s, c.a.kpis.detections, c.a.kpis.density_per_frame, c.a.kpis.unique_tracks, c.a.kpis.hotspots, c.a.kpis.max_risk, c.a.hotspot ? c.a.hotspot.id : '']
+    : [c.name, c.status])]), 'text/csv');
+$('#expJson').onclick = () => download('riverguard_dashboard.json', JSON.stringify(RG, null, 2), 'application/json');
+
+/* ================= footer ================= */
+$('#foot').innerHTML = `Detector: <b>${esc(RG.detector.model)}</b>${RG.detector.zero_shot ? ' — zero-shot, chưa fine-tune (độ chính xác còn hạn chế)' : ''}
+  · ${RG.detector.prompts.length} nhãn open-vocab · Nguy cơ là điểm tổng hợp, chưa hiệu chuẩn xác suất
+  · Toạ độ camera trên GIS ${RG.cameras.some(c => c.placeholder) ? 'đang là vị trí minh hoạ' : 'theo cấu hình'}
+  · Dữ liệu tạo lúc ${esc(RG.generated_at)}`;
+
+/* ================= main loop ================= */
+function loop(now) {
+  if (S.mode === 'ops' && S.cam) {
+    drawLive(); drawMap(now);
+    if (trendGeom) { const ph = document.getElementById('playhead');
+      if (ph) { const t = Math.min(trendGeom.t1, Math.max(trendGeom.t0, video.currentTime || 0)); const x = trendGeom.X(t); ph.setAttribute('x1', x); ph.setAttribute('x2', x); } }
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ================= boot ================= */
+renderCams();
+if (withData.length) {
+  // Deep links: #cam=<id>, #zone=<A..I>, #ana (analytics), #gis (map view) — handy for demos.
+  const hp = new URLSearchParams(location.hash.slice(1));
+  const wanted = hp.get('cam') && camById(hp.get('cam')) && camById(hp.get('cam')).a ? hp.get('cam') : null;
+  const first = wanted || (RG.queue.length ? RG.queue[0].cam : withData[0].id);   // default: most urgent camera
+  selectCam(first, hp.get('zone') || undefined);
+  if (hp.has('gis')) setMapView('gis');
+  if (hp.has('ana')) setMode('ana');
+} else {
+  $('#ops').innerHTML = `<section class="panel" style="grid-column:1/-1"><div class="pb"><h2>Chưa có dữ liệu</h2>
+    <p class="muted">Chạy pipeline trước, ví dụ:<br><code>python -m riverguard.pipeline --source data/raw/input1.mp4 --stride 5 --output-dir outputs/video/input1</code></p></div></section>`;
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
