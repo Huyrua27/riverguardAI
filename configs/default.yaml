@@ -1,0 +1,73 @@
+# RiverGuard AI — pipeline config (end-to-end)
+project: riverguard-ai
+seed: 42
+device: auto            # auto | cpu | cuda:0
+
+detection:
+  model: yoloworld       # yolo | yoloworld | rtdetr
+  # yoloworld = open-vocabulary, chạy zero-shot (không cần train) theo `prompts`.
+  # Đổi sang `model: yolo` + weights fine-tuned khi đã có dataset gán nhãn.
+  weights: models/detection/yolov8s-world.pt
+  conf_threshold: 0.01   # zero-shot open-vocab trên mặt nước khó → ngưỡng thấp để đủ recall;
+                         # nâng lên (0.25+) sau khi fine-tune detector trên dữ liệu gán nhãn
+  iou_threshold: 0.5
+  imgsz: 1280            # ảnh phân giải cao → bắt rác nhỏ / ở xa
+  prompts:               # từ khoá open-vocab (từ đơn hoạt động tốt hơn cụm từ)
+    - bottle
+    - plastic bag
+    - bag
+    - plastic
+    - foam
+    - styrofoam
+    - box
+    - cup
+    - can
+    - trash
+    - debris
+    - container
+  classes: [plastic_bottle, plastic_bag, foam, organic, other]  # cho model: yolo
+
+tracking:
+  method: iou            # iou | bytetrack | botsort
+  track_thresh: 0.0      # phải ≤ detection.conf_threshold; zero-shot conf rất thấp nên để 0
+  match_thresh: 0.3
+  track_buffer: 30
+  max_center_dist: 1.5   # ghép theo khoảng cách tâm (đơn vị: đường chéo box) khi IoU thấp
+
+motion:
+  optical_flow: farneback   # farneback | raft (dự phòng khi track thưa)
+  smoothing_window: 5
+  meters_per_pixel: null    # hiệu chuẩn camera; null → vận tốc hiển thị px/s
+
+# Tầng Decision cấp vùng — dùng cho dashboard (Hotspot Alert, Priority Queue)
+analytics:
+  zones: [3, 3]             # chia khung hình thành lưới vùng thu gom → Zone A..I
+  recency_half_life: 0.33   # trọng số theo thời gian (tỉ lệ độ dài phiên): gần đây nặng hơn
+  compensate_camera_motion: true   # trừ chuyển động nền (median) khi camera lia
+  confidence_ref: 0.25      # điểm detector coi là "tự tin"; zero-shot (~0.03) → độ tin cậy thấp
+  min_obs_for_trend: 3      # số quan sát tối thiểu ở nửa đầu phiên để tính % thay đổi mật độ
+
+# Gộp nhãn open-vocab về nhóm rác của đề tài (Waste composition)
+categories:
+  Plastic: [bottle, plastic bag, bag, plastic, cup, container]
+  Foam: [foam, styrofoam, box]
+  Organic: [debris]
+  Other: [can, trash]
+
+prediction:
+  model: grid_temporal      # grid_temporal | convlstm
+  grid_size: [32, 32]
+  horizon_seconds: 1200     # lead time cảnh báo: dự báo 20 phút tới
+  lookahead_seconds: 10     # cửa sổ ngoại suy quỹ đạo trong khung hình (giây)
+  history_seconds: 300
+
+decision:
+  risk_weights:
+    density: 0.4
+    convergence: 0.4
+    confidence: 0.2
+  alert_threshold: 0.7      # HIGH khi risk >= 0.7
+
+dashboard:
+  host: 127.0.0.1           # đổi thành 0.0.0.0 (hoặc --host) để máy khác trong mạng LAN truy cập
+  port: 8000

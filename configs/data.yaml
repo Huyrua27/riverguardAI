@@ -1,0 +1,21 @@
+# Nguồn dữ liệu — kê khai minh bạch giấy phép (Điều 5 Thể lệ)
+datasets:
+  public:
+    - name: floating-waste-public   # placeholder: điền tên bộ dữ liệu thật + URL + license
+      url: "<điền URL>"
+      license: "<điền license>"
+      split: [train, val]
+  self_collected:
+    - name: hcmc-canals-2026
+      description: "Video tự quay tại kênh/sông TP.HCM, đa điều kiện thời tiết/dòng chảy"
+      anonymized: true             # ẩn danh người/biển số theo docs/ETHICS.md
+      license: "internal-competition-use"
+
+paths:
+  raw: data/raw
+  processed: data/processed
+  external: data/external
+
+augmentation:
+  hard_negative_mining: true       # reflection, glare, foam, wave, shadow
+  transforms: [flip, brightness, blur, cutout, weather_sim]
